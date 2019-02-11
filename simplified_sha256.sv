@@ -6,7 +6,7 @@ module simplified_sha256(input logic clk, reset_n, start,
  input logic [31:0] mem_read_data);
  
  // SHA256 K constants
- parameter int sha256_k[0:63] = {
+ parameter int sha256_k[0:63] = '{
  32'h428a2f98, 32'h71374491, 32'hb5c0fbcf, 32'he9b5dba5, 32'h3956c25b, 32'h59f111f1, 32'h923f82a4, 32'hab1c5ed5,
  32'hd807aa98, 32'h12835b01, 32'h243185be, 32'h550c7dc3, 32'h72be5d74, 32'h80deb1fe, 32'h9bdc06a7, 32'hc19bf174,
  32'he49b69c1, 32'hefbe4786, 32'h0fc19dc6, 32'h240ca1cc, 32'h2de92c6f, 32'h4a7484aa, 32'h5cb0a9dc, 32'h76f988da,
@@ -19,8 +19,10 @@ module simplified_sha256(input logic clk, reset_n, start,
 
 
 assign mem_clk=clk;
-logic [31:0] w[16];
-enum logic [2:0] {IDLE=2'b000,READ=2'b001,SCOMPUTE=2'b010,LCOMPUTE=2'b011,WRITE=2'b100, DONE=2'b101} state;
+logic [31:0] w[16],H[8];
+logic [15:0] count,i,j,block;
+logic [31:0] a,b,c,d,e,f,g,h;
+enum logic [2:0] {IDLE=3'b000,READ=3'b001,SCOMPUTE=3'b010,LCOMPUTE=3'b011,WRITE=3'b100, DONE=3'b101} state;
  
 function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w, k);
  logic [31:0] S1, S0, ch, maj, t1, t2; // internal signals
@@ -32,6 +34,7 @@ begin
  maj = (a & b) ^ (a & c) ^ (b & c);
  t2 = maj + S0;
  sha256_op = {t1 + t2, a, b, c, d + t1, e, f, g};
+ $display("THIS IS W15: %h", w[15]);
 end
 endfunction
 
@@ -54,21 +57,21 @@ always_ff @(posedge clk, negedge reset_n) begin
 		state <= IDLE;
 		done<=0;
 		count<=0;
+		i<=1;
+		j<=0;
+		block<=0;
 	end 
  else case(state)
 	IDLE: begin
 		if(start) begin
-			H0<= 'h6a09e667;
-			H1<= 'hbb67ae85;
-			H2<= 'h3c6ef372;
-			H3<= 'ha54ff53a;
-			H4<= 'h510e527f;
-			H5<= 'h9b05688c;
-			H6<= 'h1f83d9ab;
-			H7<= 'h5be0cd19;
-			i<=1;
-			count<=0;
-			block<=0;
+			H[0]<= 'h6a09e667;
+			H[1]<= 'hbb67ae85;
+			H[2]<= 'h3c6ef372;
+			H[3]<= 'ha54ff53a;
+			H[4]<= 'h510e527f;
+			H[5]<= 'h9b05688c;
+			H[6]<= 'h1f83d9ab;
+			H[7]<= 'h5be0cd19;
 			state<=READ;
 			mem_we<=0; 
 			mem_addr<= message_addr;
@@ -78,19 +81,19 @@ always_ff @(posedge clk, negedge reset_n) begin
 	READ:begin
 		if(i<16 & count<16)begin//for block1 0<count<16 stage
 			if(i==1)begin
-				a<=H0;
-				b<=H1;
-				c<=H2;
-				d<=H3;
-				e<=H4;
-				f<=H5;
-				g<=H6;
-				h<=H7;
+				a<=H[0];
+				b<=H[1];
+				c<=H[2];
+				d<=H[3];
+				e<=H[4];
+				f<=H[5];
+				g<=H[6];
+				h<=H[7];
 			end
 			mem_we<=0;
 			mem_addr<= message_addr+i;
 			i<=i+1;
-			if(i/2==0)begin //determine if i is even, if so read again if not go to sc
+			if(i%2==0)begin //determine if i is even, if so read again if not go to sc
 				state<=READ;
 			end
 		else begin
@@ -102,19 +105,19 @@ always_ff @(posedge clk, negedge reset_n) begin
  
 		else if(i>15 & i<20)begin
 			if(i==16)begin
-				a<=H0+a;
-				b<=H1+b;
-				c<=H2+c;
-				d<=H3+d;
-				e<=H4+e;
-				f<=H5+f;
-				g<=H6+g;
-				h<=H7+h;
+				a<=H[0]+a;
+				b<=H[1]+b;
+				c<=H[2]+c;
+				d<=H[3]+d;
+				e<=H[4]+e;
+				f<=H[5]+f;
+				g<=H[6]+g;
+				h<=H[7]+h;
 			end
 			mem_we<=0;
 			mem_addr<= message_addr+i;
 			i<=i+1;
-			if(i/2==0)begin //determine if i is even, if so read again if not go to sc
+			if(i%2==0)begin //determine if i is even, if so read again if not go to sc
 					state<=READ;
 			end
 			else begin
@@ -132,7 +135,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 			else if(i>20 & i<31)begin
 				w[i-16]=32'h00000000; 
 				i<=i+1;
-				if(i/2==0)begin //determine if i is even, if so read again if not go to sc
+				if(i%2==0)begin //determine if i is even, if so read again if not go to sc
 					state<=READ;
 				end
 				else begin
@@ -147,18 +150,21 @@ always_ff @(posedge clk, negedge reset_n) begin
  
 	SCOMPUTE: begin
 		w[count]<=mem_read_data;//for lcomp
-		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, k[count]);
+		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[count]);
 		count<=count+1;
-		if(count/2==0 & count<16)begin
+		$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %h, mem_read_data: %h",state,a,b,c,d,e,f,g,h,w[count-1],count-1,mem_read_data);
+		if(count%2==0 & count<16)begin
 			state<=SCOMPUTE;
 		end
 		else if(count==15) begin
-			for (int n = 0; n < 15; n++) w[n] <= w[n+1]; // just wires
-			w[15]<=wtnew;
+			//for (int n = 0; n < 15; n++)begin
+			//	w[n] <= w[n+1]; // just wires
+			//end
+			//w[count]<=wtnew;
 			state<=LCOMPUTE;//stop it from going back to read
  //declare wtnew because it takes one cycle
 		end
-		else if(count/2==1 & count<16) begin
+		else if(count%2==1 & count<16) begin
 			state<=READ;
 		end
  //every time i is even sc again, i is odd go back to read
@@ -167,39 +173,34 @@ always_ff @(posedge clk, negedge reset_n) begin
  
 	LCOMPUTE: begin
 	if(count!=63)begin
-		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[count], k[count]);
-		for (int n = 0; n < 15; n++) w[n] <= w[n+1];
+		for (int n = 0; n < 15; n++) begin
+			w[n] <= w[n+1];
+		end
 		w[15]<=wtnew;
+		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[count]);
+		$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %h,",state,a,b,c,d,e,f,g,h,w[15],count-1,);
 		count<=count+1;
 		state<=LCOMPUTE;
 	end
 	else begin
 		block<=1;
 		count<=0;
-		state<=write;
+		state<=WRITE;
 	end
  end
  
 	WRITE: begin
 	if(block==1)begin
-		mem_we<=1;
-		mem_addr <= output_addr;
-		mem_write_data <= H0;
-		mem_addr <= output_addr+1;
-		mem_write_data <= H1;
-		mem_addr <= output_addr+2;
-		mem_write_data <= H2;
-		mem_addr <= output_addr+3;
-		mem_write_data <= H3;
-		mem_addr <= output_addr+4;
-		mem_write_data <= H4;
-		mem_addr <= output_addr+5;
-		mem_write_data <= H5;
-		mem_addr <= output_addr+6;
-		mem_write_data <= H6;
-		mem_addr <= output_addr+7;
-		mem_write_data <= H7;
-		state<=DONE;
+		if(j!=7) begin
+			mem_we<=1;
+			mem_addr <= output_addr+j;
+			mem_write_data <= H[j];
+			j<=j+1;
+			state<=WRITE;
+		end
+		else begin
+			state<=DONE;
+		end
 	end
  end
  
@@ -209,6 +210,4 @@ always_ff @(posedge clk, negedge reset_n) begin
 	end
  endcase
 end
-
-
 endmodule
