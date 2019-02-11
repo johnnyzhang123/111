@@ -96,28 +96,28 @@ always_ff @(posedge clk, negedge reset_n) begin
 			if(i%2==0)begin //determine if i is even, if so read again if not go to sc
 				state<=READ;
 			end
-		else begin
-			state<=SCOMPUTE;
-		end
+			else begin
+				state<=SCOMPUTE;
+			end
 		end
 	
  //right up to here
  
 		else if(i>15 & i<20)begin
 			if(i==16)begin
-				a<=H[0]+a;
-				b<=H[1]+b;
-				c<=H[2]+c;
-				d<=H[3]+d;
-				e<=H[4]+e;
-				f<=H[5]+f;
-				g<=H[6]+g;
-				h<=H[7]+h;
+				a<=H[0];
+				b<=H[1];
+				c<=H[2];
+				d<=H[3];
+				e<=H[4];
+				f<=H[5];
+				g<=H[6];
+				h<=H[7];
 			end
+			i<=i+1;
 			mem_we<=0;
 			mem_addr<= message_addr+i;
-			i<=i+1;
-			if(i%2==0)begin //determine if i is even, if so read again if not go to sc
+			if(i%2==0)begin //determine if i is even, if so read again if not go  to sc
 					state<=READ;
 			end
 			else begin
@@ -125,8 +125,6 @@ always_ff @(posedge clk, negedge reset_n) begin
 			end
 		end
 		else if(i>19 & i<32)begin//beginning of a new bloc
-	end
-		
 			if(i==20)begin
 				w[i-16]=32'h80000000;
 				i<=i+1;
@@ -147,12 +145,22 @@ always_ff @(posedge clk, negedge reset_n) begin
 				state<=SCOMPUTE;
 			end
 		end
+	end
  
 	SCOMPUTE: begin
-		w[count]<=mem_read_data;//for lcomp
-		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[count]);
+		if(block==0)begin
+			w[count]<=mem_read_data;//for lcomp
+			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[count]);
+		end
+		else if(block==1& count<4) begin
+			w[count]<=mem_read_data;
+			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[count]);
+		end
+		else if(block==1 & count>3) begin
+			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[count], sha256_k[count]);
+		end
 		count<=count+1;
-		$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %h, mem_read_data: %h",state,a,b,c,d,e,f,g,h,w[count-1],count-1,mem_read_data);
+		$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h,mem_read_data: %h, mem_addr:%h",state,a,b,c,d,e,f,g,h,w[count-1],count-1,i,mem_read_data,mem_addr);
 		if(count%2==0 & count<16)begin
 			state<=SCOMPUTE;
 		end
@@ -172,35 +180,54 @@ always_ff @(posedge clk, negedge reset_n) begin
 
  
 	LCOMPUTE: begin
-	if(count!=63)begin
-		for (int n = 0; n < 15; n++) begin
-			w[n] <= w[n+1];
+		if(count<65)begin
+			for (int n = 0; n < 15; n++) begin
+				w[n] <= w[n+1];
+			end
+			w[15]<=wtnew;
+			count<=count+1;
+			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[count]);
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d,i:%h, block: %h, mem_addr:%h",state,a,b,c,d,e,f,g,h,w[15],count-1,i,block,mem_addr);
+			if(count==64 & block==0)begin
+				block<=1;
+				count<=0;
+				H[0]<=H[0]+a;
+				H[1]<=H[1]+b;
+				H[2]<=H[2]+c;
+				H[3]<=H[3]+d;
+				H[4]<=H[4]+e;
+				H[5]<=H[5]+f;
+				H[6]<=H[6]+g;
+				H[7]<=H[7]+h;
+				state<=READ;
+			end
+			else if(count==64 & block==1) begin
+				H[0]<=H[0]+a;
+				H[1]<=H[1]+b;
+				H[2]<=H[2]+c;
+				H[3]<=H[3]+d;
+				H[4]<=H[4]+e;
+				H[5]<=H[5]+f;
+				H[6]<=H[6]+g;
+				H[7]<=H[7]+h;
+				state<=WRITE;
+			end
+			else begin
+				state<=LCOMPUTE;
+			end
 		end
-		w[15]<=wtnew;
-		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[count]);
-		$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %h,",state,a,b,c,d,e,f,g,h,w[15],count-1,);
-		count<=count+1;
-		state<=LCOMPUTE;
 	end
-	else begin
-		block<=1;
-		count<=0;
-		state<=WRITE;
-	end
- end
  
 	WRITE: begin
-	if(block==1)begin
-		if(j!=7) begin
-			mem_we<=1;
-			mem_addr <= output_addr+j;
-			mem_write_data <= H[j];
-			j<=j+1;
-			state<=WRITE;
-		end
-		else begin
-			state<=DONE;
-		end
+	if(j!=8) begin
+		mem_we<=1;
+		mem_addr <= output_addr+j;
+		mem_write_data <= H[j];
+		j<=j+1;
+		state<=WRITE;
+	end
+	else begin
+		state<=DONE;
 	end
  end
  
