@@ -16,9 +16,12 @@ module bitcoin_hash (input logic clk, reset_n, start,
  32'h748f82ee, 32'h78a5636f, 32'h84c87814, 32'h8cc70208, 32'h90befffa, 32'ha4506ceb, 32'hbef9a3f7, 32'hc67178f2
 };
 parameter NUM_NONCES = 16;
-logic [31:0] w[16],H[8],FC[8];
-logic [8:0] write_count,read_count,calc_count;
+logic [31:0] w[16],H0,H1,H2,H3,H4,H5,H6,H7,FC0,FC1,FC2,FC3,FC4,FC5,FC6,FC7;
+logic [31:0] a,b,c,d,e,f,g,h;
+logic [8:0] write_count,read_count,calc_count,nonces;
+logic [4:0]n;
 logic[2:0]block;
+enum logic [2:0] {IDLE=3'b000,READ=3'b001,PRECOMPUTE=3'b010,COMPUTE=3'b011,WRITE=3'b100, DONE=3'b101} state;
 function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w, k);
  logic [31:0] S1, S0, ch, maj, t1, t2; // internal signals
 begin
@@ -49,17 +52,18 @@ always_ff @(posedge clk, negedge reset_n) begin
 		state <= IDLE;
 		done<=0;
 		calc_count<=0;
-		read_count<=2;
+		read_count<=0;
 		write_count<=0;
 		block<=0;
-		H[0]<= 'h6a09e667;
-		H[1]<= 'hbb67ae85;
-		H[2]<= 'h3c6ef372;
-		H[3]<= 'ha54ff53a;
-		H[4]<= 'h510e527f;
-		H[5]<= 'h9b05688c;
-		H[6]<= 'h1f83d9ab;
-		H[7]<= 'h5be0cd19;
+		H0<= 'h6a09e667;
+		H1<= 'hbb67ae85;
+		H2<= 'h3c6ef372;
+		H3<= 'ha54ff53a;
+		H4<= 'h510e527f;
+		H5<= 'h9b05688c;
+		H6<= 'h1f83d9ab;
+		H7<= 'h5be0cd19;
+		nonces<='h00000000;
 	end 
 	else case(state)
 	IDLE: begin
@@ -68,24 +72,75 @@ always_ff @(posedge clk, negedge reset_n) begin
 		mem_addr<= message_addr;
 	end
 	READ: begin
-		a<=H[0];
-		b<=H[1];
-		c<=H[2];
-		d<=H[3];
-		e<=H[4];
-		f<=H[5];
-		g<=H[6];
-		h<=H[7];
+		a<=H0;
+		b<=H1;
+		c<=H2;
+		d<=H3;
+		e<=H4;
+		f<=H5;
+		g<=H6;
+		h<=H7;
 		mem_we<=0;
 		mem_addr<=message_addr+1;
-		state<=COMPUTE;
+		state<=PRECOMPUTE;
+	end
+	PRECOMPUTE: begin
+		if(read_count<16)begin
+			w[15]<=mem_read_data;
+			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[calc_count]);
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h,mem_read_data: %h, mem_addr:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count,mem_read_data,mem_addr);
+			calc_count<=calc_count+1;
+			for(n=14;n>-1;n--)begin
+				w[n]<=w[n+1];
+			end
+			mem_we<=0;
+			mem_addr<=message_addr+read_count+2;
+			read_count<=read_count+1;
+			state<=PRECOMPUTE;
+		end
+		else begin//first block 16-64
+			w[15]<=wtnew;
+			for (int n = 0; n < 15; n++) begin
+				w[n] <= w[n+1];
+			end
+			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[calc_count]);//needs to be changed, figure out what needs to be precomputed
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+			calc_count<=calc_count+1;
+			state<=PRECOMPUTE;
+			if(calc_count>62)begin
+				mem_we<=0;
+				mem_addr<=message_addr+read_count;
+				read_count<=read_count+1;
+				if(calc_count==64)begin
+					FC0<=H0+a;
+					FC1<=H1+b;
+					FC2<=H2+c;
+					FC3<=H3+d;
+					FC4<=H4+e;
+					FC5<=H5+f;
+					FC6<=H6+g;
+					FC7<=H7+h;
+					H0<=H0+a;
+					H1<=H1+b;
+					H2<=H2+c;						
+					H3<=H3+d;
+					H4<=H4+e;
+					H5<=H5+f;
+					H6<=H6+g;
+					H7<=H7+h;
+					block<=1;
+					calc_count<=0;
+					state<=COMPUTE;
+				end
+			end
+		end	
 	end
 	COMPUTE: begin
-		if(block==0)begin
-			//use w[15] the whole time
-			if(read_count<15)begin
+		if(block==1)begin
+			if(calc_count<3)begin
 				w[15]<=mem_read_data;
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[calc_count]);
+							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
 				calc_count<=calc_count+1;
 				for(n=14;n>-1;n--)begin
 					w[n]<=w[n+1];
@@ -93,52 +148,142 @@ always_ff @(posedge clk, negedge reset_n) begin
 				mem_we<=0;
 				mem_addr<=message_addr+read_count;
 				read_count<=read_count+1;
+				state<=COMPUTE; 
+			end
+			else if(calc_count==3)begin
+				w[15]<=nonces;
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, nonces, sha256_k[calc_count]);
+							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+
+				for(n=14;n>-1;n--)begin
+					w[n]<=w[n+1];
+				end
+				read_count<=read_count+1;
+				calc_count<=calc_count+1;
+				nonces<=nonces+1;				
+				state<=COMPUTE;
+			end
+			else if(calc_count==4)begin
+				w[15]<=32'h80000000;
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 32'h80000000, sha256_k[calc_count]);
+							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+
+				for(n=14;n>-1;n--)begin
+					w[n]<=w[n+1];
+				end				
+				calc_count<=calc_count+1;
+				read_count<=read_count+1;
+				state<=COMPUTE;
+			end
+			else if(calc_count==15)begin
+					w[15]<=32'd640;
+					{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 32'd640, sha256_k[calc_count]);
+						$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+		
+					calc_count<=calc_count+1;
+					state<=COMPUTE;
+			end
+			else if(calc_count>15 & calc_count<64)begin
+				w[15]<=wtnew;
+				for (int n = 0; n < 15; n++) begin
+					w[n] <= w[n+1];
+				end
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[calc_count]);
+							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+
+				calc_count<=calc_count+1;
+			end
+			else if(calc_count==64)begin
+				H0<= 'h6a09e667;
+				H1<= 'hbb67ae85;
+				H2<= 'h3c6ef372;
+				H3<= 'ha54ff53a;
+				H4<= 'h510e527f;
+				H5<= 'h9b05688c;
+				H6<= 'h1f83d9ab;
+				H7<= 'h5be0cd19;
+				w[0]<=H0+a;
+				w[1]<=H1+b;
+				w[2]<=H2+c;
+				w[3]<=H3+d;
+				w[4]<=H4+e;
+				w[5]<=H5+f;
+				w[6]<=H6+g;
+				w[7]<=H7+h;
+				w[8]=32'h80000000;
+				w[9]='h00000000;
+				w[10]='h00000000;
+				w[11]='h00000000;
+				w[12]='h00000000;
+				w[13]='h00000000;
+				w[14]='h00000000;
+				w[15]='d256;
+				calc_count<=0;
+			end
+			else begin
+				w[15]=32'h00000000;
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 32'h00000000, sha256_k[calc_count]);
+							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+
+				for(n=14;n>-1;n--)begin
+					w[n]<=w[n+1];
+				end
+			end
+			state<=COMPUTE;
+		end//last round load 
+		else if(block==2)begin
+			if(calc_count<16)begin
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[calc_count], sha256_k[calc_count]);
+							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+
+				calc_count<=calc_count+1;
+				state<=COMPUTE;
+			end
+			else if(calc_count>15 & calc_count<64)begin
+				w[15]<=wtnew;
+				for (int n = 0; n < 15; n++) begin
+					w[n] <= w[n+1];
+				end				
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[calc_count]);
+							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+
+				calc_count<=calc_count+1;
 				state<=COMPUTE;
 			end
 			else begin
-				w[15]<=wtnew;
-				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[calc_count]);//needs to be changed, figure out what needs to be precomputed
-				calc_count<=calc_count+1;
-				if(calc_count==64)begin
-					H[0]<=H[0]+a;
-					H[1]<=H[1]+b;
-					H[2]<=H[2]+c;
-					H[3]<=H[3]+d;
-					H[4]<=H[4]+e;
-					H[5]<=H[5]+f;
-					H[6]<=H[6]+g;
-					H[7]<=H[7]+h;
-					block<=1;
-					calc_count<=0;
-					state<=COMPUTE;
-				end
+				state<=WRITE;
+				block<=1;
+				calc_count<=0;
+				read_count<=16;
+				H0<=FC0;
+				H1<=FC1;
+				H2<=FC2;						
+				H3<=FC3;
+				H4<=FC4;
+				H5<=FC5;
+				H6<=FC6;
+				H7<=FC7;
 			end
 		end
-		else if(block==1)begin
-			if(read_count>15&read_count<20)begin
-				//keep reading
-			end
-			else if(read_count==20)begin
-				//assign whatever word we need to assign
-				//that word<=word+1
-			end
-			else begin
-				//last round load 
-				H[0]<= 'h6a09e667;
-				H[1]<= 'hbb67ae85;
-				H[2]<= 'h3c6ef372;
-				H[3]<= 'ha54ff53a;
-				H[4]<= 'h510e527f;
-				H[5]<= 'h9b05688c;
-				H[6]<= 'h1f83d9ab;
-				H[7]<= 'h5be0cd19;
-			end
-			//FC[0-7]<=h[0-7]+ah[0-7]
+	end
+	
+	WRITE: begin
+		mem_we<=1;
+		mem_addr <= output_addr+write_count;
+		write_count<=write_count+1;
+		mem_write_data<=H0+a;
+		state<=COMPUTE;
+		if(nonces=='h0000000F)begin
+			state<=DONE;
 		end
-		else if(block==2)begin
-		
-		end
+	end
+	DONE:begin
+		done<=1;
+		state<=IDLE;
 	end
 	endcase
 	end
+always_ff @(posedge clk, negedge reset_n)begin
+	$display("time:%h",calc_count);
+end
 endmodule
