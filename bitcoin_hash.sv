@@ -1,3 +1,4 @@
+//fmax 104.17 area 4036 2166
 module bitcoin_hash (input logic clk, reset_n, start,
  input logic [15:0] message_addr, output_addr,
  output logic done, mem_clk, mem_we,
@@ -16,12 +17,12 @@ module bitcoin_hash (input logic clk, reset_n, start,
  32'h748f82ee, 32'h78a5636f, 32'h84c87814, 32'h8cc70208, 32'h90befffa, 32'ha4506ceb, 32'hbef9a3f7, 32'hc67178f2
 };
 parameter NUM_NONCES = 16;
-logic [31:0] w[16],H0,H1,H2,H3,H4,H5,H6,H7,FC0,FC1,FC2,FC3,FC4,FC5,FC6,FC7;
+logic [31:0] w[16],p3[16],H0,H1,H2,H3,H4,H5,H6,H7,FC0,FC1,FC2,FC3,FC4,FC5,FC6,FC7;
 logic [31:0] a,b,c,d,e,f,g,h;
-logic [8:0] write_count,read_count,calc_count,nonces;
+logic [8:0] read_count,calc_count,nonces;
 logic [4:0]n;
 logic[2:0]block;
-enum logic [2:0] {IDLE=3'b000,READ=3'b001,PRECOMPUTE=3'b010,COMPUTE=3'b011,WRITE=3'b100, DONE=3'b101} state;
+enum logic [2:0] {IDLE=3'b000,READ=3'b001,PRECOMPUTE=3'b010,MIDDLE=3'b011,COMPUTE=3'b100,WRITE=3'b101, DONE=3'b110} state;
 assign mem_clk=clk;
 function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w, k);
  logic [31:0] S1, S0, ch, maj, t1, t2; // internal signals
@@ -53,7 +54,6 @@ $display("mem_write_data:%h,",mem_write_data);
 		done<=0;
 		calc_count<=0;
 		read_count<=0;
-		write_count<=0;
 		block<=0;
 		H0<= 'h6a09e667;
 		H1<= 'hbb67ae85;
@@ -102,6 +102,7 @@ $display("mem_write_data:%h,",mem_write_data);
 			//state<=PRECOMPUTE;
 		end
 		else begin//first block 16-63
+		
 			w[15]<=wtnew;
 			for (int n = 0; n < 15; n++) begin
 				w[n] <= w[n+1];
@@ -141,11 +142,26 @@ $display("mem_write_data:%h,",mem_write_data);
 					block<=1;
 					calc_count<=0;
 					state<=COMPUTE;
+					//state<=MIDDLE;
 					$display("FC0:%h",H0+a);
 				end
 			end
 		end	
 	end
+	/*MIDDLE:begin
+				mem_we<=0;
+				w[15]<=mem_read_data;
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[calc_count]);
+				calc_count<=calc_count+1;
+				for(n=0;n<15;n++)begin
+					w[n]<=w[n+1];
+				end
+				mem_addr<=message_addr+read_count;
+				read_count<=read_count+1;
+				if(calc_count==2)begin
+					state<=COMPUTE;
+				end
+	end*/
 	COMPUTE: begin
 		if(block==1)begin
 			if(calc_count<3)begin
@@ -161,6 +177,7 @@ $display("mem_write_data:%h,",mem_write_data);
 				read_count<=read_count+1;
 			end
 			else if(calc_count==3)begin
+			//if(calc_count==3)begin
 				w[15]<=nonces;
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, nonces, sha256_k[calc_count]);
 			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count);			
@@ -208,22 +225,22 @@ $display("mem_write_data:%h,",mem_write_data);
 				
 			end
 			else if(calc_count==64)begin
-				w[0]<=H0+a;
-				w[1]<=H1+b;
-				w[2]<=H2+c;
-				w[3]<=H3+d;
-				w[4]<=H4+e;
-				w[5]<=H5+f;
-				w[6]<=H6+g;
-				w[7]<=H7+h;
-				w[8]=32'h80000000;
-				w[9]='h00000000;
-				w[10]='h00000000;
-				w[11]='h00000000;
-				w[12]='h00000000;
-				w[13]='h00000000;
-				w[14]='h00000000;
-				w[15]='d256;
+				p3[0]<=H0+a;
+				p3[1]<=H1+b;
+				p3[2]<=H2+c;
+				p3[3]<=H3+d;
+				p3[4]<=H4+e;
+				p3[5]<=H5+f;
+				p3[6]<=H6+g;
+				p3[7]<=H7+h;
+				p3[8]=32'h80000000;
+				p3[9]='h00000000;
+				p3[10]='h00000000;
+				p3[11]='h00000000;
+				p3[12]='h00000000;
+				p3[13]='h00000000;
+				p3[14]='h00000000;
+				p3[15]='d256;
 				H0<= 'h6a09e667;
 				H1<= 'hbb67ae85;
 				H2<= 'h3c6ef372;
@@ -248,9 +265,13 @@ $display("mem_write_data:%h,",mem_write_data);
 			end
 			state<=COMPUTE;
 		end//last round load 
-		else if(block==2)begin//再设立一个array 存储第一轮开始的constant， 这样phase3 就一直用w[15]
+		else if(block==2)begin
+			w[15]<=p3[calc_count];
+			for(n=0;n<15;n++)begin
+				w[n]<=w[n+1];
+			end
 			if(calc_count<16)begin
-				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[calc_count], sha256_k[calc_count]);
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, p3[calc_count], sha256_k[calc_count]);
 			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w[t]: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
 				calc_count<=calc_count+1;
 				
@@ -273,8 +294,6 @@ $display("mem_write_data:%h,",mem_write_data);
 						mem_addr<=output_addr+nonces;
 						mem_write_data<=a+32'h6a09e667;
 						state<=WRITE;
-						block<=1;
-						calc_count<=0;
 					end
 				end
 			end
@@ -284,9 +303,11 @@ $display("mem_write_data:%h,",mem_write_data);
 	WRITE: begin
 	if(nonces!='h0000000F)begin
 		mem_we<=0;
-		mem_addr<=message_addr+16;
+		mem_addr<=message_addr+read_count;
 		nonces<=nonces+1;
-		read_count<=read_count+1;
+		read_count<=18;
+		calc_count<=0;
+		block<=1;
 		mem_addr<=17;
 		H0<=FC0;
 		H1<=FC1;
@@ -305,6 +326,18 @@ $display("mem_write_data:%h,",mem_write_data);
 		g<=FC6;
 		h<=FC7;
 		state<=COMPUTE;
+		/*a<='hc1ea1ae4;
+		b<='h4da0bea6;
+		c<='h40c35490;
+		d<='h366afef3;
+		e<='h41911a9f;
+		f<='h372309d4;
+		g<='hfe048692;
+		h<='h5ed9538f;
+		w[15]<='h159c048d;
+		w[14]<='h8ace0246;
+		w[13]<='h45670123;
+		calc_count<=3;*/
 	end
 	else begin
 		state<=DONE;
