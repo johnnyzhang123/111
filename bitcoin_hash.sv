@@ -22,6 +22,7 @@ logic [8:0] write_count,read_count,calc_count,nonces;
 logic [4:0]n;
 logic[2:0]block;
 enum logic [2:0] {IDLE=3'b000,READ=3'b001,PRECOMPUTE=3'b010,COMPUTE=3'b011,WRITE=3'b100, DONE=3'b101} state;
+assign mem_clk=clk;
 function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w, k);
  logic [31:0] S1, S0, ch, maj, t1, t2; // internal signals
 begin
@@ -40,14 +41,13 @@ function logic [31:0] rightrotate(input logic [31:0] x,
  rightrotate = (x >> r) | (x << (32-r));
 endfunction
 function logic [31:0] wtnew; // function with no inputs
- logic [31:0] s0, s1,os0;
- os0=s0;
+ logic [31:0] s0, s1;
  s0 = rightrotate(w[1],7)^rightrotate(w[1],18)^(w[1]>>3);
  s1 = rightrotate(w[14],17)^rightrotate(w[14],19)^(w[14]>>10);
  wtnew = w[0] + s0 + w[9] + s1;
 endfunction
-assign mem_clk=clk;
 always_ff @(posedge clk, negedge reset_n) begin
+$display("mem_write_data:%h,",mem_write_data);
 	if (!reset_n) begin
 		state <= IDLE;
 		done<=0;
@@ -67,9 +67,12 @@ always_ff @(posedge clk, negedge reset_n) begin
 	end 
 	else case(state)
 	IDLE: begin
-		state<=READ;
-		mem_we<=0; 
-		mem_addr<= message_addr;
+		if(start)begin
+			state<=READ;
+			mem_we<=0; 
+			mem_addr<= message_addr;
+					$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h,mem_read_data: %h, mem_addr:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count,mem_read_data,mem_addr);
+		end
 	end
 	READ: begin
 		a<=H0;
@@ -80,35 +83,34 @@ always_ff @(posedge clk, negedge reset_n) begin
 		f<=H5;
 		g<=H6;
 		h<=H7;
-		mem_we<=0;
 		mem_addr<=message_addr+1;
 		state<=PRECOMPUTE;
+					$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h,mem_read_data: %h, mem_addr:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count,mem_read_data,mem_addr);
+
 	end
 	PRECOMPUTE: begin
-		if(read_count<16)begin
+		if(calc_count<16)begin
 			w[15]<=mem_read_data;
 			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[calc_count]);
-			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h,mem_read_data: %h, mem_addr:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count,mem_read_data,mem_addr);
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h,mem_read_data: %h, mem_addr:%h,w0:%h，mem_we:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count,mem_read_data,mem_addr,w[0],mem_we);
 			calc_count<=calc_count+1;
-			for(n=14;n>-1;n--)begin
+			for(n=0;n<15;n++)begin
 				w[n]<=w[n+1];
 			end
-			mem_we<=0;
 			mem_addr<=message_addr+read_count+2;
 			read_count<=read_count+1;
-			state<=PRECOMPUTE;
+			//state<=PRECOMPUTE;
 		end
-		else begin//first block 16-64
+		else begin//first block 16-63
 			w[15]<=wtnew;
 			for (int n = 0; n < 15; n++) begin
 				w[n] <= w[n+1];
 			end
 			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[calc_count]);//needs to be changed, figure out what needs to be precomputed
-			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count);			
 			calc_count<=calc_count+1;
-			state<=PRECOMPUTE;
+			//state<=PRECOMPUTE;
 			if(calc_count>62)begin
-				mem_we<=0;
 				mem_addr<=message_addr+read_count;
 				read_count<=read_count+1;
 				if(calc_count==64)begin
@@ -128,9 +130,18 @@ always_ff @(posedge clk, negedge reset_n) begin
 					H5<=H5+f;
 					H6<=H6+g;
 					H7<=H7+h;
+					a<=H0+a;
+					b<=H1+b;
+					c<=H2+c;						
+					d<=H3+d;
+					e<=H4+e;
+					f<=H5+f;
+					g<=H6+g;
+					h<=H7+h;
 					block<=1;
 					calc_count<=0;
 					state<=COMPUTE;
+					$display("FC0:%h",H0+a);
 				end
 			end
 		end	
@@ -138,50 +149,53 @@ always_ff @(posedge clk, negedge reset_n) begin
 	COMPUTE: begin
 		if(block==1)begin
 			if(calc_count<3)begin
+				mem_we<=0;
 				w[15]<=mem_read_data;
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, mem_read_data, sha256_k[calc_count]);
-							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count);			
 				calc_count<=calc_count+1;
-				for(n=14;n>-1;n--)begin
+				for(n=0;n<15;n++)begin
 					w[n]<=w[n+1];
 				end
-				mem_we<=0;
 				mem_addr<=message_addr+read_count;
 				read_count<=read_count+1;
-				state<=COMPUTE; 
 			end
 			else if(calc_count==3)begin
 				w[15]<=nonces;
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, nonces, sha256_k[calc_count]);
-							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count);			
 
-				for(n=14;n>-1;n--)begin
+				for(n=0;n<15;n++)begin
 					w[n]<=w[n+1];
 				end
-				read_count<=read_count+1;
 				calc_count<=calc_count+1;
-				nonces<=nonces+1;				
-				state<=COMPUTE;
 			end
 			else if(calc_count==4)begin
 				w[15]<=32'h80000000;
-				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 32'h80000000, sha256_k[calc_count]);
-							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
-
-				for(n=14;n>-1;n--)begin
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 'h80000000, sha256_k[calc_count]);
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count);			
+				for(n=0;n<15;n++)begin
 					w[n]<=w[n+1];
-				end				
+				end		
 				calc_count<=calc_count+1;
-				read_count<=read_count+1;
-				state<=COMPUTE;
+			end
+			else if(calc_count>4 & calc_count<15) begin
+				w[15]<=32'h00000000;
+				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 32'h00000000, sha256_k[calc_count]);
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count);			
+				for(n=0;n<15;n++)begin
+					w[n]<=w[n+1];
+				end
+				calc_count<=calc_count+1;
 			end
 			else if(calc_count==15)begin
 					w[15]<=32'd640;
+					for (int n = 0; n < 15; n++) begin
+						w[n] <= w[n+1];
+					end
 					{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 32'd640, sha256_k[calc_count]);
-						$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
-		
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h,w0:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count,w[0]);			
 					calc_count<=calc_count+1;
-					state<=COMPUTE;
 			end
 			else if(calc_count>15 & calc_count<64)begin
 				w[15]<=wtnew;
@@ -189,19 +203,11 @@ always_ff @(posedge clk, negedge reset_n) begin
 					w[n] <= w[n+1];
 				end
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[calc_count]);
-							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
-
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h,w0:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count,w[0]);				
 				calc_count<=calc_count+1;
+				
 			end
 			else if(calc_count==64)begin
-				H0<= 'h6a09e667;
-				H1<= 'hbb67ae85;
-				H2<= 'h3c6ef372;
-				H3<= 'ha54ff53a;
-				H4<= 'h510e527f;
-				H5<= 'h9b05688c;
-				H6<= 'h1f83d9ab;
-				H7<= 'h5be0cd19;
 				w[0]<=H0+a;
 				w[1]<=H1+b;
 				w[2]<=H2+c;
@@ -218,72 +224,97 @@ always_ff @(posedge clk, negedge reset_n) begin
 				w[13]='h00000000;
 				w[14]='h00000000;
 				w[15]='d256;
+				H0<= 'h6a09e667;
+				H1<= 'hbb67ae85;
+				H2<= 'h3c6ef372;
+				H3<= 'ha54ff53a;
+				H4<= 'h510e527f;
+				H5<= 'h9b05688c;
+				H6<= 'h1f83d9ab;
+				H7<= 'h5be0cd19;
+				a<= 'h6a09e667;
+				b<= 'hbb67ae85;
+				c<= 'h3c6ef372;
+				d<= 'ha54ff53a;
+				e<= 'h510e527f;
+				f<= 'h9b05688c;
+				g<= 'h1f83d9ab;
+				h<= 'h5be0cd19;
 				calc_count<=0;
-			end
-			else begin
-				w[15]=32'h00000000;
-				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, 32'h00000000, sha256_k[calc_count]);
-							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+				read_count<=16;
+				block<=2;
+				$display("state: %h, h0:%h,h1:%h!!1",state,H0+a,H1);				
 
-				for(n=14;n>-1;n--)begin
-					w[n]<=w[n+1];
-				end
 			end
 			state<=COMPUTE;
 		end//last round load 
-		else if(block==2)begin
+		else if(block==2)begin//再设立一个array 存储第一轮开始的constant， 这样phase3 就一直用w[15]
 			if(calc_count<16)begin
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, w[calc_count], sha256_k[calc_count]);
-							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
-
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w[t]: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
 				calc_count<=calc_count+1;
-				state<=COMPUTE;
+				
 			end
-			else if(calc_count>15 & calc_count<64)begin
+			else begin
 				w[15]<=wtnew;
 				for (int n = 0; n < 15; n++) begin
 					w[n] <= w[n+1];
 				end				
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, h, wtnew, sha256_k[calc_count]);
-							$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, t: %d, i:%h",state,a,b,c,d,e,f,g,h,w[calc_count-1],calc_count-1,read_count);			
+			$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, w15: %h, calc_count: %d, read_count:%h",state,a,b,c,d,e,f,g,h,w[15],calc_count-1,read_count);			
 
 				calc_count<=calc_count+1;
 				state<=COMPUTE;
-			end
-			else begin
-				state<=WRITE;
-				block<=1;
-				calc_count<=0;
-				read_count<=16;
-				H0<=FC0;
-				H1<=FC1;
-				H2<=FC2;						
-				H3<=FC3;
-				H4<=FC4;
-				H5<=FC5;
-				H6<=FC6;
-				H7<=FC7;
+				if(calc_count>62)begin
+					mem_addr<=message_addr+read_count;
+					read_count<=read_count+1;
+					if(calc_count==64)begin
+						mem_we<=1;
+						mem_addr<=output_addr+nonces;
+						mem_write_data<=a+32'h6a09e667;
+						state<=WRITE;
+						block<=1;
+						calc_count<=0;
+					end
+				end
 			end
 		end
 	end
 	
 	WRITE: begin
-		mem_we<=1;
-		mem_addr <= output_addr+write_count;
-		write_count<=write_count+1;
-		mem_write_data<=H0+a;
+	if(nonces!='h0000000F)begin
+		mem_we<=0;
+		mem_addr<=message_addr+16;
+		nonces<=nonces+1;
+		read_count<=read_count+1;
+		mem_addr<=17;
+		H0<=FC0;
+		H1<=FC1;
+		H2<=FC2;						
+		H3<=FC3;
+		H4<=FC4;
+		H5<=FC5;
+		H6<=FC6;
+		H7<=FC7;
+		a<=FC0;
+		b<=FC1;
+		c<=FC2;						
+		d<=FC3;
+		e<=FC4;
+		f<=FC5;
+		g<=FC6;
+		h<=FC7;
 		state<=COMPUTE;
-		if(nonces=='h0000000F)begin
-			state<=DONE;
-		end
+	end
+	else begin
+		state<=DONE;
+	end
 	end
 	DONE:begin
 		done<=1;
 		state<=IDLE;
 	end
 	endcase
-	end
-always_ff @(posedge clk, negedge reset_n)begin
-	$display("time:%h",calc_count);
 end
+
 endmodule
