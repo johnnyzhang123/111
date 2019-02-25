@@ -140,6 +140,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				w[15]<=mem_read_data;
 				mem_addr<=mem_addr+1;
 				$display("wwww:%h",w[15]);
+				sum<=w[15]+sha256_k[0]+g;
 				if(calc_count==64)begin
 					FC0<=H0+a;
 					FC1<=H1+b;
@@ -167,7 +168,6 @@ always_ff @(posedge clk, negedge reset_n) begin
 					h<=H7+h;
 					block<=1;
 					calc_count<=0;
-					sum<=w[15]+sha256_k[0]+g;
 					//state<=COMPUTE;
 					//mem_addr<=message_addr+16;
 					state<=MIDDLE;
@@ -186,7 +186,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 					w[n]<=w[n+1];
 				end
 				mem_addr<=mem_addr+1;
-				if(calc_count==1)begin
+				if(calc_count==2)begin
 					state<=COMPUTE;
 					w[15]<=nonces;
 					{Ma, Mb, Mc, Md, Me, Mf, Mg, Mh} <= sha256_op(a, b, c, d, e, f, g,sum);
@@ -206,7 +206,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				read_count<=read_count+1;
 			end
 			else if(calc_count==3)begin*/
-			if(calc_count==2)begin
+			if(calc_count==3)begin
 				w[15]<=32'h80000000;
 				sum<=w[15]+sha256_k[calc_count+1]+g;
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g,sum);
@@ -224,7 +224,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				end		
 				calc_count<=calc_count+1;
 			end*/
-			else if(calc_count>2 & calc_count<13) begin
+			else if(calc_count>3 & calc_count<14) begin
 				w[15]<=32'h00000000;
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, sum);
 				for(n=0;n<15;n++)begin
@@ -232,7 +232,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				end
 				calc_count<=calc_count+1;
 			end
-			else if(calc_count==15)begin
+			else if(calc_count==14)begin
 					w[15]<=32'd640;
 					for (int n = 0; n < 15; n++) begin
 						w[n] <= w[n+1];
@@ -240,7 +240,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 					{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g,sum);
 					calc_count<=calc_count+1;
 			end
-			else if(calc_count>13 & calc_count<64)begin
+			else if(calc_count>14 & calc_count<64)begin
 				w[15]<=wtnew;
 				for (int n = 0; n < 15; n++) begin
 					w[n] <= w[n+1];
