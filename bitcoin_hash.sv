@@ -22,7 +22,7 @@ logic [31:0] inter[16];
 logic [6:0] count;
 logic [5:0]nonces;
 logic [4:0]n;
-enum logic [3:0] {IDLE,READ1,READ2,PPCOMPUTE,PREP,PREP2,PREP3,PREP4,COMPUTE,REST,COMPUTE2,REST2,WRITE,BACK,DONE} state;
+enum logic [3:0] {IDLE,READ1,READ2,PPCOMPUTE,PREP,PREP2,PREP3,PREP4,COMPUTE,REST,COMPUTE2,WRITE,REST2,BACK,DONE} state;
 assign mem_clk=clk;
 //function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w, k);
 //assign sha256_out=sha256_op(a....sum);
@@ -269,54 +269,43 @@ always_ff @(posedge clk, negedge reset_n) begin
 				w[15]<=wtnew;			
 				if(count==64)begin
 					w[15]<=inter[15];
-					mem_addr<=mem_addr+1;
 					count<=0;
 					g<=FC7;
-					state<=REST2;
+					state<=WRITE;
+					H0<=FC0;
+					H1<=FC1;
+					H2<=FC2;						
+					H3<=FC3;
+					H4<=FC4;
+					H5<=FC5;
+					H6<=FC6;
+					H7<=FC7;
 				end
 			end
 	end
-	REST2:begin
+	WRITE:begin
+		mem_we<=1;
+		mem_addr<=output_addr+nonces;
+		mem_write_data<=a+32'h6a09e667;
+		state<=BACK;
+	end
+	/*REST2:begin
 		w[15]<=mem_read_data;
 		for (int n = 0; n < 15; n++) begin
 			w[n] <= w[n+1];
 		end	
 		sum<=w[15]+sha256_k[count]+g;
-		mem_we<=1;
-		mem_addr<=output_addr+nonces;
-		state<=WRITE;
-	end
-	WRITE:begin
-		mem_write_data<=a+32'h6a09e667;
+		count<=count+1;
 		state<=BACK;
-	end
+		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g,sum);
+	end*/
+
 	BACK: begin
 	if(nonces!='h0000000F)begin
 		mem_we<=0;
-		w[15]<=mem_read_data;
-		for (int n = 0; n < 15; n++) begin
-			w[n] <= w[n+1];
-		end	
+		mem_addr<=18;
 		nonces<=nonces+1;
-		count<=0;
-		mem_addr<=mem_addr+1;
-		H0<=FC0;
-		H1<=FC1;
-		H2<=FC2;						
-		H3<=FC3;
-		H4<=FC4;
-		H5<=FC5;
-		H6<=FC6;
-		H7<=FC7;
 		state<=PREP4;
-		a<=FC0;
-		b<=FC1;
-		c<=FC2;
-		d<=FC3;
-		e<=FC4;
-		f<=FC5;
-		g<=FC6;
-		h<=FC7;
 	end
 	else begin
 		state<=DONE;
