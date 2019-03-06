@@ -1,4 +1,3 @@
-//fmax 172.09 area 3743 2184
 module bitcoin_hash (input logic clk, reset_n, start,
  input logic [15:0] message_addr, output_addr,
  output logic done, mem_clk, mem_we,
@@ -18,7 +17,7 @@ module bitcoin_hash (input logic clk, reset_n, start,
 };
 logic [31:0] w[16],H0,H1,H2,H3,H4,H5,H6,H7,FC0,FC1,FC2,FC3,FC4,FC5,FC6,FC7;
 logic [31:0] a,b,c,d,e,f,g,h,sum;
-logic [31:0] inter[16];
+logic [31:0] inter[8];
 logic [6:0] count;
 logic [5:0]nonces;
 logic [4:0]n;
@@ -85,6 +84,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 		e<= H4;
 		f<= H5;
 		g<= H6;
+		h<= H7;
 	end
 			
 	READ2: begin
@@ -117,7 +117,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 		else begin
 				w[15]<=wtnew;
 				state<=PREP2;
-				inter[15]<=mem_read_data;
+				inter[7]<=mem_read_data;
 		end
 	end
 	PREP2: begin//first block 16-63
@@ -130,7 +130,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 			count<=count+1;
 			mem_addr<=16;
 			if(count==64)begin
-				w[15]<=inter[15];
+				w[15]<=inter[7];
 				mem_addr<=mem_addr+1;
 				state<=PREP3;
 			end
@@ -216,14 +216,14 @@ always_ff @(posedge clk, negedge reset_n) begin
 				inter[4]<=H5+f;
 				inter[5]<=H6+g;
 				inter[6]<=H7+h;
-				inter[7]<=32'h80000000;
+				/*inter[7]<=32'h80000000;
 				inter[8]<=32'h00000000;
 				inter[9]<=32'h00000000;
 				inter[10]<=32'h00000000;
 				inter[11]<=32'h00000000;
 				inter[12]<=32'h00000000;
 				inter[13]<=32'h00000000;
-				inter[14]<='d256;
+				inter[14]<='d256;*/
 				H0<= 'h6a09e667;
 				H1<= 'hbb67ae85;
 				H2<= 'h3c6ef372;
@@ -262,13 +262,22 @@ always_ff @(posedge clk, negedge reset_n) begin
 			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g,sum);
 			sum<=w[15]+sha256_k[count]+g;
 			count<=count+1;
-			if(count<15)begin	
+			if(count<7)begin	
 				w[15]<=inter[count];
+			end
+			else if(count==7)begin
+				w[15]<=32'h80000000;
+			end
+			else if(count>7 & count<14) begin
+				w[15]<=32'h00000000;
+			end
+			else if(count==14)begin
+				w[15]<='d256;
 			end
 			else begin
 				w[15]<=wtnew;			
 				if(count==64)begin
-					w[15]<=inter[15];
+					w[15]<=inter[7];
 					count<=0;
 					g<=FC7;
 					state<=WRITE;
@@ -289,17 +298,6 @@ always_ff @(posedge clk, negedge reset_n) begin
 		mem_write_data<=a+32'h6a09e667;
 		state<=BACK;
 	end
-	/*REST2:begin
-		w[15]<=mem_read_data;
-		for (int n = 0; n < 15; n++) begin
-			w[n] <= w[n+1];
-		end	
-		sum<=w[15]+sha256_k[count]+g;
-		count<=count+1;
-		state<=BACK;
-		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g,sum);
-	end*/
-
 	BACK: begin
 	if(nonces!='h0000000F)begin
 		mem_we<=0;
