@@ -71,21 +71,13 @@ always_ff @(posedge clk, negedge reset_n) begin
          H5<=32'h9b05688c;
          H6<=32'h1f83d9ab;
          H7<=32'h5be0cd19; 
-			//g<=32'h5be0cd19;
+			g<=32'h5be0cd19;
 			state <= READ1;
 	end
 			 
 	READ1: begin
 		state <= READ2;				
 		mem_addr <= mem_addr + 1;	
-		a<= H0;
-		b<= H1;
-		c<= H2;
-		d<= H3;
-		e<= H4;
-		f<= H5;
-		g<= H6;
-		h<= H7;
 	end
 			
 	READ2: begin
@@ -95,7 +87,15 @@ always_ff @(posedge clk, negedge reset_n) begin
 		mem_addr <= mem_addr + 1;
 	end
 	PPCOMPUTE: begin
-		 sum <= w[15] + sha256_k[count] + 'h5be0cd19;
+		 sum <= w[15] + sha256_k[count] + g;
+		 a<= H0;
+		b<= H1;
+		c<= H2;
+		d<= H3;
+		e<= H4;
+		f<= H5;
+		g<= H6;
+		h<= H7;
 		 for (int n = 0; n < 15; n++)begin 
 			w[n] <= w[n+1];
 		 end
@@ -295,9 +295,6 @@ always_ff @(posedge clk, negedge reset_n) begin
 				w[15]<='d256;
 			end*/
 			else begin
-					for (int n = 0; n < 15; n++) begin
-						w[n] <= w[n+1];
-					end
 				w[15]<=wtnew;			
 				if(count==64)begin
 					w[15]<=inter;
