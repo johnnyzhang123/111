@@ -139,6 +139,8 @@ always_ff @(posedge clk, negedge reset_n) begin
 			w[t][15]<=wtnew(t);
 			sum[t]<=w[t][15]+sha256_k[count]+g[t];
 			{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t], sum[t]);//needs to be changed, figure out what needs to be precomputed
+					mem_addr<=16;
+
 		end
 		if(count==64)begin
 			for(int t=0;t<16;t++)begin
@@ -148,7 +150,6 @@ always_ff @(posedge clk, negedge reset_n) begin
 			state<=PREP3;
 		end
 		count<=count+1;
-		mem_addr<=16;
 	end
 	PREP3:begin
 		for(int t=0;t<16;t++)begin
@@ -207,28 +208,28 @@ always_ff @(posedge clk, negedge reset_n) begin
 					w[t][n]<=w[t][n+1];
 				end
 			end
-				if(count<3)begin
+				if(count==1)begin
 					for(int t=0;t<16;t++)begin
 						w[t][15]<=mem_read_data;
 					end
 					mem_addr<=mem_addr+1;
 				end
-				else if(count==3) begin
+				else if(count==2) begin
 					for(int t=0;t<16;t++)begin
 						w[t][15]<=nonces[t];
 					end
 				end
-				else if(count==4)begin
+				else if(count==3)begin
 					for(int t=0;t<16;t++)begin
 						w[t][15]<=32'h80000000;
 					end
 				end
-				else if(count>4 & count<15) begin
+				else if(count>3 & count<14) begin
 					for(int t=0;t<16;t++)begin
 						w[t][15]<=32'h00000000;
 					end
 				end
-				else if(count==15)begin
+				else if(count==14)begin
 					for(int t=0;t<16;t++)begin
 						w[t][15]<=32'd640;
 					end
