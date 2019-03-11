@@ -374,10 +374,6 @@ end
 endmodule
 
 
-
-
-
-//todo k0k1  g constant
 module bitcoin_hash (input logic clk, reset_n, start,
  input logic [15:0] message_addr, output_addr,
  output logic done, mem_clk, mem_we,
@@ -396,7 +392,7 @@ module bitcoin_hash (input logic clk, reset_n, start,
  32'h748f82ee, 32'h78a5636f, 32'h84c87814, 32'h8cc70208, 32'h90befffa, 32'ha4506ceb, 32'hbef9a3f7, 32'hc67178f2
 };
 logic [5:0] nonces[16];
-logic [31:0] w[16][16],H0[16],H1[16],H2[16],H3[16],H4[16],H5[16],H6[16],H7[16],FC0,FC1,FC2,FC3,FC4,FC5,FC6,FC7;
+logic [31:0] w[16][16],H0[16],H1[16],H2[16],H3[16],H4[16],H5[16],H6[16],H7[16],FC0[16],FC1[16],FC2[16],FC3[16],FC4[16],FC5[16],FC6[16],FC7[16];
 logic [31:0] a[16],b[16],c[16],d[16],e[16],f[16],g[16],h[16],sum[16];
 logic [31:0] inter;
 logic [6:0] count;
@@ -425,6 +421,8 @@ function logic [31:0] wtnew(input logic [4:0] t); // function with no inputs
  s1 = rightrotate(w[t][14],17)^rightrotate(w[t][14],19)^(w[t][14]>>10);
  wtnew = w[t][0] + s0 + w[t][9] + s1;
 endfunction
+
+
 always_ff @(posedge clk, negedge reset_n) begin
 	$display("state: %h, a: %h, b: %h, c: %h, d: %h, e: %h, f: %h, g: %h, h: %h, wt: %h, count: %d,mem_read_data: %h, mem_addr:%h, sum:%h ",state,a[0],b[0],c[0],d[0],e[0],f[0],g[0],h[0],w[0][15],count-1,mem_read_data,mem_addr,sum[0]);
 	if (!reset_n) begin
@@ -433,7 +431,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 		count<=0;
 	end 
 	else case(state)
-	
+
 	IDLE:begin
 		if(start) begin
 			mem_we <= 0;
@@ -469,15 +467,15 @@ always_ff @(posedge clk, negedge reset_n) begin
 	end
 	PPCOMPUTE: begin
 		for(int t=0;t<16;t++)begin
-			sum[t] <= w[t][15] + sha256_k[count] + 32'h5be0cd19;
-			a[t]<= H0[t];
+			sum[t] <= w[t][15] + sha256_k[count] + g[t];
+			/*a[t]<= H0[t];
 			b[t]<= H1[t];
 			c[t]<= H2[t];
 			d[t]<= H3[t];
 			e[t]<= H4[t];
 			f[t]<= H5[t];
 			g[t]<= H6[t];
-			h[t]<= H7[t];
+			h[t]<= H7[t];*/
 			for (int n = 0; n < 15; n++)begin 
 				w[t][n] <= w[t][n+1];
 			end
@@ -492,7 +490,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 			for(n=0;n<15;n++)begin
 				w[t][n]<=w[t][n+1];
 			end 
-			{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
+			//{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
 			sum[t]<=w[t][15]+sha256_k[count]+g[t];
 		end
 		if(count<15)begin
@@ -517,7 +515,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 			end 
 			w[t][15]<=wtnew(t);
 			sum[t]<=w[t][15]+sha256_k[count]+g[t];
-			{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t], sum[t]);//needs to be changed, figure out what needs to be precomputed
+			//{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t], sum[t]);//needs to be changed, figure out what needs to be precomputed
 					mem_addr<=16;
 
 		end
@@ -536,7 +534,14 @@ always_ff @(posedge clk, negedge reset_n) begin
 			for(n=0;n<15;n++)begin
 				w[t][n]<=w[t][n+1];
 			end
-
+			FC0[t]<=H0[t]+a[t];
+			FC1[t]<=H1[t]+b[t];
+			FC2[t]<=H2[t]+c[t];
+			FC3[t]<=H3[t]+d[t];
+			FC4[t]<=H4[t]+e[t];
+			FC5[t]<=H5[t]+f[t];
+			FC6[t]<=H6[t]+g[t];
+			FC7[t]<=H7[t]+h[t];
 			H0[t]<=H0[t]+a[t];
 			H1[t]<=H1[t]+b[t];
 			H2[t]<=H2[t]+c[t];						
@@ -545,16 +550,8 @@ always_ff @(posedge clk, negedge reset_n) begin
 			H5[t]<=H5[t]+f[t];
 			H6[t]<=H6[t]+g[t];
 			H7[t]<=H7[t]+h[t];
-			g[t]<=H7[t]+h[t];
+			//g[t]<=H7[t]+h[t];
 		end
-					FC0<=H0[0]+a[0];
-			FC1<=H1[0]+b[0];
-			FC2<=H2[0]+c[0];
-			FC3<=H3[0]+d[0];
-			FC4<=H4[0]+e[0];
-			FC5<=H5[0]+f[0];
-			FC6<=H6[0]+g[0];
-			FC7<=H7[0]+h[0];
 		count<=0;
 		state<=PREP4;
 		mem_addr<=mem_addr+1;
@@ -565,14 +562,14 @@ always_ff @(posedge clk, negedge reset_n) begin
 			for(n=0;n<15;n++)begin
 				w[t][n]<=w[t][n+1];
 			end
-			a[t]<=H0[t];
+			/*a[t]<=H0[t];
 			b[t]<=H1[t];
 			c[t]<=H2[t];						
 			d[t]<=H3[t];
 			e[t]<=H4[t];
 			f[t]<=H5[t];
 			g[t]<=H6[t];
-			h[t]<=H7[t];
+			h[t]<=H7[t];*/
 			sum[t]<=w[t][15]+sha256_k[count]+g[t];
 		end
 		mem_addr<=mem_addr+1;
@@ -583,7 +580,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 		if(count<65) begin
 			for(int t=0;t<16;t++)begin
 				sum[t]<=w[t][15]+sha256_k[count]+g[t];
-				{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t], sum[t]);
+				//{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t], sum[t]);
 				for(n=0;n<15;n++)begin
 					w[t][n]<=w[t][n+1];
 				end
@@ -625,7 +622,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				for(int t=0;t<16;t++)begin
 					w[t][15]<=H0[t]+a[t];
 					w[t][0]<=H1[t]+b[t];//cc=1
-					w[t][1]<=H2[t]+c[t];
+					w[t][1]<=H2[t]+c[t];//cc=2
 					w[t][2]<=H3[t]+d[t];
 					w[t][3]<=H4[t]+e[t];
 					w[t][4]<=H5[t]+f[t];
@@ -647,7 +644,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 					H5[t]<= 'h9b05688c;
 					H6[t]<= 'h1f83d9ab;
 					H7[t]<= 'h5be0cd19;
-					g[t]<='h5be0cd19;
+					//g[t]<='h5be0cd19;
 				end
 				count<=0;
 				state<=REST;
@@ -655,14 +652,14 @@ always_ff @(posedge clk, negedge reset_n) begin
 		end//last round load 
 	REST: begin
 		for(int t=0;t<16;t++)begin
-			a[t]<=H0[t];
+			/*a[t]<=H0[t];
 			b[t]<=H1[t];
 			c[t]<=H2[t];		
 			d[t]<=H3[t];
 			e[t]<=H4[t];
 			f[t]<=H5[t];
 			g[t]<=H6[t];
-		h[t]<=H7[t];
+			h[t]<=H7[t];*/
 			sum[t]<=w[t][15]+sha256_k[count]+g[t];
 		//w[15]<=inter[count];
 			w[t][15]<=w[t][0];
@@ -679,7 +676,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				for (int n = 0; n < 15; n++) begin
 					w[t][n] <= w[t][n+1];
 				end
-				{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
+				//{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
 				sum[t]<=w[t][15]+sha256_k[count]+g[t];
 			end
 		count<=count+1;
@@ -700,7 +697,6 @@ always_ff @(posedge clk, negedge reset_n) begin
 			else if(count==14)begin
 				w[15]<='d256;
 			end*/
-			
 			else begin
 				for(int t=0;t<16;t++)begin
 					w[t][15]<=wtnew(t);			
@@ -708,15 +704,15 @@ always_ff @(posedge clk, negedge reset_n) begin
 				if(count==64)begin
 					for(int t=0;t<16;t++)begin
 						w[t][15]<=inter;
-						g[t]<=FC7;
-						H0[t]<=FC0;
-						H1[t]<=FC1;
-						H2[t]<=FC2;						
-						H3[t]<=FC3;
-						H4[t]<=FC4;
-						H5[t]<=FC5;
-						H6[t]<=FC6;
-						H7[t]<=FC7;
+						//g[t]<=FC7[t];
+						H0[t]<=FC0[t];
+						H1[t]<=FC1[t];
+						H2[t]<=FC2[t];						
+						H3[t]<=FC3[t];
+						H4[t]<=FC4[t];
+						H5[t]<=FC5[t];
+						H6[t]<=FC6[t];
+						H7[t]<=FC7[t];
 					end
 					count<=0;
 					//t<=0;
@@ -751,5 +747,93 @@ always_ff @(posedge clk, negedge reset_n) begin
 		state<=IDLE;
 	end
 	endcase
+end
+
+always_ff @(posedge clk, negedge reset_n) begin
+case(state)
+IDLE:begin
+	for(int t=0;t<16;t++)begin
+		g[t]<=32'h5be0cd19;
+	end
+end
+PPCOMPUTE:begin
+	for(int t=0;t<16;t++)begin
+		a[t]<= H0[t];
+			b[t]<= H1[t];
+			c[t]<= H2[t];
+			d[t]<= H3[t];
+			e[t]<= H4[t];
+			f[t]<= H5[t];
+			g[t]<= H6[t];
+			h[t]<= H7[t];
+	end
+end
+PREP:begin
+	for(int t=0;t<16;t++)begin
+		{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
+		//sum[t]<=w[t][15]+sha256_k[count]+g[t];
+	end
+end
+PREP2:begin
+	for(int t=0;t<16;t++)begin
+		{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
+		//sum[t]<=w[t][15]+sha256_k[count]+g[t];
+	end
+end
+PREP3:begin
+	for(int t=0;t<16;t++)begin
+		g[t]<=H7[t]+h[t];
+	end
+end
+PREP4:begin
+	for(int t=0;t<16;t++)begin
+		a[t]<= H0[t];
+			b[t]<= H1[t];
+			c[t]<= H2[t];
+			d[t]<= H3[t];
+			e[t]<= H4[t];
+			f[t]<= H5[t];
+			g[t]<= H6[t];
+			h[t]<= H7[t];
+	end
+end
+COMPUTE:begin
+if(count<65)begin
+		for(int t=0;t<16;t++)begin
+			{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
+			//sum[t]<=w[t][15]+sha256_k[count]+g[t];
+		end
+	end
+else begin
+	for(int t=0;t<16;t++)begin
+		g[t]<='h5be0cd19;
+	end
+end
+end
+REST:begin
+	for(int t=0;t<16;t++)begin
+		a[t]<= H0[t];
+			b[t]<= H1[t];
+			c[t]<= H2[t];
+			d[t]<= H3[t];
+			e[t]<= H4[t];
+			f[t]<= H5[t];
+			g[t]<= H6[t];
+			h[t]<= H7[t];
+	end
+end
+COMPUTE2:begin
+	for(int t=0;t<16;t++)begin
+		{a[t], b[t], c[t], d[t], e[t], f[t], g[t], h[t]} <= sha256_op(a[t], b[t], c[t], d[t], e[t], f[t], g[t],sum[t]);
+		//sum[t]<=w[t][15]+sha256_k[count]+g[t];
+	end
+	if(count==64)begin
+		for(int t=0;t<16;t++)begin
+			g[t]<=FC7[t];
+		end
+	end
+end
+
+endcase
 end
 endmodule
