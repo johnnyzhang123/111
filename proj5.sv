@@ -373,7 +373,6 @@ always_ff @(posedge clk, negedge reset_n) begin
 end
 endmodule
 
-
 module bitcoin_hash (input logic clk, reset_n, start,
  input logic [15:0] message_addr, output_addr,
  output logic done, mem_clk, mem_we,
@@ -467,7 +466,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 	end
 	PPCOMPUTE: begin
 		for(int t=0;t<16;t++)begin
-			sum[t] <= w[t][15] + sha256_k[count] + g[t];
+			sum[t] <= w[t][15] + sha256_k[count] +32'h5be0cd19;
 			/*a[t]<= H0[t];
 			b[t]<= H1[t];
 			c[t]<= H2[t];
@@ -749,13 +748,14 @@ always_ff @(posedge clk, negedge reset_n) begin
 	endcase
 end
 
-always_ff @(posedge clk, negedge reset_n) begin
+always_ff @(posedge clk) begin
 case(state)
+/*
 IDLE:begin
 	for(int t=0;t<16;t++)begin
 		g[t]<=32'h5be0cd19;
 	end
-end
+end*/
 PPCOMPUTE:begin
 	for(int t=0;t<16;t++)begin
 		a[t]<= H0[t];
