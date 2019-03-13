@@ -1,5 +1,4 @@
-//1345	1645	2990	196.19	2200	11.214	33.529
-
+//1210 1389 137.69 2200=28.932
 module bitcoin_hash (input logic clk, reset_n, start,
  input logic [15:0] message_addr, output_addr,
  output logic done, mem_clk, mem_we,
@@ -19,10 +18,10 @@ module bitcoin_hash (input logic clk, reset_n, start,
 };
 logic [31:0] w[16],H0,H1,H2,H3,H4,H5,H6,H7,FC0,FC1,FC2,FC3,FC4,FC5,FC6,FC7;
 logic [31:0] a,b,c,d,e,f,g,h,sum;
-logic [31:0] inter[8];
+//logic [31:0] inter;
 logic [6:0] count;
 logic [5:0]nonces;
-logic [4:0]n;
+//logic [4:0]n;
 enum logic [3:0] {IDLE,READ1,READ2,PPCOMPUTE,PREP,PREP2,PREP3,PREP4,COMPUTE,REST,COMPUTE2,WRITE,REST2,BACK,DONE} state;
 assign mem_clk=clk;
 //function logic [255:0] sha256_op(input logic [31:0] a, b, c, d, e, f, g, h, w, k);
@@ -73,20 +72,13 @@ always_ff @(posedge clk, negedge reset_n) begin
          H5<=32'h9b05688c;
          H6<=32'h1f83d9ab;
          H7<=32'h5be0cd19; 
+		//g<=32'h5be0cd19;
 			state <= READ1;
 	end
 			 
 	READ1: begin
 		state <= READ2;				
 		mem_addr <= mem_addr + 1;	
-		a<= H0;
-		b<= H1;
-		c<= H2;
-		d<= H3;
-		e<= H4;
-		f<= H5;
-		g<= H6;
-		h<= H7;
 	end
 			
 	READ2: begin
@@ -96,7 +88,15 @@ always_ff @(posedge clk, negedge reset_n) begin
 		mem_addr <= mem_addr + 1;
 	end
 	PPCOMPUTE: begin
-		 sum <= w[15] + sha256_k[count] + 'h5be0cd19;
+		 sum <= w[15] + sha256_k[count] +32'h5be0cd19;
+		 a<= H0;
+		b<= H1;
+		c<= H2;
+		d<= H3;
+		e<= H4;
+		f<= H5;
+		g<= H6;
+		h<= H7;
 		 for (int n = 0; n < 15; n++)begin 
 			w[n] <= w[n+1];
 		 end
@@ -106,7 +106,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 		 state <= PREP;
 	end	 
 	PREP: begin
-		for(n=0;n<15;n++)begin
+		for(int n=0;n<15;n++)begin
 			w[n]<=w[n+1];
 		end 
 		{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g,sum);
@@ -119,11 +119,11 @@ always_ff @(posedge clk, negedge reset_n) begin
 		else begin
 				w[15]<=wtnew;
 				state<=PREP2;
-				inter[7]<=mem_read_data;
+				//inter<=mem_read_data;
 		end
 	end
 	PREP2: begin//first block 16-63
-			for(n=0;n<15;n++)begin
+			for(int n=0;n<15;n++)begin
 				w[n]<=w[n+1];
 			end 
 			w[15]<=wtnew;
@@ -132,14 +132,14 @@ always_ff @(posedge clk, negedge reset_n) begin
 			count<=count+1;
 			mem_addr<=16;
 			if(count==64)begin
-				w[15]<=inter[7];
+				w[15]<=mem_read_data;
 				mem_addr<=mem_addr+1;
 				state<=PREP3;
 			end
 	end
 	PREP3:begin
 		w[15]<=mem_read_data;
-		for(n=0;n<15;n++)begin
+		for(int n=0;n<15;n++)begin
 			w[n]<=w[n+1];
 		end
 		mem_addr<=mem_addr+1;
@@ -165,7 +165,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 	end
 	PREP4:begin
 		w[15]<=mem_read_data;
-		for(n=0;n<15;n++)begin
+		for(int n=0;n<15;n++)begin
 			w[n]<=w[n+1];
 		end
 		mem_addr<=mem_addr+1;
@@ -186,7 +186,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				sum<=w[15]+sha256_k[count]+g;
 				{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g, sum);
 				count<=count+1;
-				for(n=0;n<15;n++)begin
+				for(int n=0;n<15;n++)begin
 					w[n]<=w[n+1];
 				end
 				if(count==1)begin
@@ -211,14 +211,29 @@ always_ff @(posedge clk, negedge reset_n) begin
 			end
 			else begin
 				w[15]<=H0+a;
-				inter[0]<=H1+b;//cc=1
+				w[0]<=H1+b;//cc=1
+				w[1]<=H2+c;//cc=2
+				w[2]<=H3+d;
+				w[3]<=H4+e;
+				w[4]<=H5+f;
+				w[5]<=H6+g;
+				w[6]<=H7+h;
+				w[7]<=32'h80000000;
+				w[8]<=32'h00000000;
+				w[9]<=32'h00000000;
+				w[10]<=32'h00000000;
+				w[11]<=32'h00000000;
+				w[12]<=32'h00000000;
+				w[13]<=32'h00000000;
+				w[14]<='d256;
+				/*inter[0]<=H1+b;//cc=1
 				inter[1]<=H2+c;//cc=2
 				inter[2]<=H3+d;
 				inter[3]<=H4+e;
 				inter[4]<=H5+f;
 				inter[5]<=H6+g;
 				inter[6]<=H7+h;
-				/*inter[7]<=32'h80000000;
+				inter[7]<=32'h80000000;
 				inter[8]<=32'h00000000;
 				inter[9]<=32'h00000000;
 				inter[10]<=32'h00000000;
@@ -234,7 +249,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				H5<= 'h9b05688c;
 				H6<= 'h1f83d9ab;
 				H7<= 'h5be0cd19;
-				g<='h5be0cd19;
+				//g<='h5be0cd19;
 				count<=0;
 				state<=REST;
 			end
@@ -248,11 +263,12 @@ always_ff @(posedge clk, negedge reset_n) begin
 		f<=H5;
 		g<=H6;
 		h<=H7;
-		sum<=w[15]+sha256_k[count]+g;
-		w[15]<=inter[count];
-		for (int n = 0; n < 15; n++) begin
-			w[n] <= w[n+1];
-		end
+		 sum <= w[15] + sha256_k[count] + 32'h5be0cd19;
+		//w[15]<=inter[count];
+		w[15]<=w[0];
+			for (int n = 0; n < 15; n++) begin
+				w[n] <= w[n+1];
+			end
 		count<=count+1;
 		mem_addr<=17;	
 		state<=COMPUTE2;
@@ -264,7 +280,22 @@ always_ff @(posedge clk, negedge reset_n) begin
 			{a, b, c, d, e, f, g, h} <= sha256_op(a, b, c, d, e, f, g,sum);
 			sum<=w[15]+sha256_k[count]+g;
 			count<=count+1;
-			if(count<7)begin	
+			if(count<15)begin
+						w[15]<=w[0];
+			end
+			else if(count==61)begin
+			mem_addr<=16;
+			w[15]<=wtnew;
+			end
+			else if(count==62)begin
+			mem_addr<=16;
+			w[15]<=wtnew;
+			end
+			else if(count==63)begin
+			mem_addr<=mem_addr+1;
+			w[15]<=mem_read_data;
+			end
+			/*if(count<7)begin	
 				w[15]<=inter[count];
 			end
 			else if(count==7)begin
@@ -275,11 +306,11 @@ always_ff @(posedge clk, negedge reset_n) begin
 			end
 			else if(count==14)begin
 				w[15]<='d256;
-			end
+			end*/
 			else begin
 				w[15]<=wtnew;			
 				if(count==64)begin
-					w[15]<=inter[7];
+					w[15]<=mem_read_data;
 					count<=0;
 					g<=FC7;
 					state<=WRITE;
@@ -317,4 +348,5 @@ always_ff @(posedge clk, negedge reset_n) begin
 	end
 	endcase
 end
+
 endmodule
