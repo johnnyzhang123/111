@@ -1,4 +1,4 @@
-1259	1133	2392	189.72	2200	11.596	27.738
+//1178	1389	2567	201.94	2200	10.894	27.966
 module bitcoin_hash (input logic clk, reset_n, start,
  input logic [15:0] message_addr, output_addr,
  output logic done, mem_clk, mem_we,
@@ -72,7 +72,7 @@ always_ff @(posedge clk, negedge reset_n) begin
          H5<=32'h9b05688c;
          H6<=32'h1f83d9ab;
          H7<=32'h5be0cd19; 
-		g<='h5be0cd19;
+			g<=32'h5be0cd19;
 			state <= READ1;
 	end
 			 
@@ -88,15 +88,23 @@ always_ff @(posedge clk, negedge reset_n) begin
 		mem_addr <= mem_addr + 1;
 	end
 	PPCOMPUTE: begin
-				sum<=w[15]+sha256_k[count]+'h5be0cd19;
-		 a<= H0;
+				sum<=w[15]+sha256_k[count]+g;
+		/* a<= H0;
 		b<= H1;
 		c<= H2;
 		d<= H3;
 		e<= H4;
 		f<= H5;
 		g<= H6;
-		h<= H7;
+		h<= H7;*/
+			a<=32'h6a09e667;
+         b<=32'hbb67ae85;
+         c<=32'h3c6ef372;
+         d<=32'ha54ff53a;
+         e<=32'h510e527f;
+         f<=32'h9b05688c;
+         g<=32'h1f83d9ab;
+      h<=32'h5be0cd19; 
 		 for (int n = 0; n < 15; n++)begin 
 			w[n] <= w[n+1];
 		 end
@@ -263,7 +271,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				f<= 'h9b05688c;
 				g<= 'h1f83d9ab;
 				h<= 'h5be0cd19;
-				sum<=w[15]+sha256_k[count]+'h5be0cd19;
+				sum<=w[15]+sha256_k[count]+g;
 		//w[15]<=inter[count];
 		w[15]<=w[0];
 			for (int n = 0; n < 15; n++) begin
