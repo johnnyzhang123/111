@@ -278,7 +278,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				w[n] <= w[n+1];
 			end
 		count<=count+1;
-		mem_addr<=17;	
+		mem_addr<=16;	
 		state<=COMPUTE2;
 	end
 	COMPUTE2: begin
@@ -291,18 +291,15 @@ always_ff @(posedge clk, negedge reset_n) begin
 			if(count<15)begin
 						w[15]<=w[0];
 			end
-			else if(count==61)begin
-			mem_addr<=16;
+			/*else if(count==61)begin
+			//mem_addr<=16;
 			w[15]<=wtnew;
 			end
 			else if(count==62)begin
-			mem_addr<=16;
+			//mem_addr<=16;
 			w[15]<=wtnew;
-			end
-			else if(count==63)begin
-			mem_addr<=mem_addr+1;
-			w[15]<=mem_read_data;
-			end
+			end*/
+
 			/*if(count<7)begin	
 				w[15]<=inter[count];
 			end
@@ -316,8 +313,12 @@ always_ff @(posedge clk, negedge reset_n) begin
 				w[15]<='d256;
 			end*/
 			else begin
-				w[15]<=wtnew;			
-				if(count==64)begin
+				w[15]<=wtnew;	
+				if(count==63)begin
+					mem_addr<=mem_addr+1;
+					w[15]<=mem_read_data;
+				end		
+				else if(count==64)begin
 					w[15]<=mem_read_data;
 					count<=0;
 					g<=H7;
