@@ -1,4 +1,4 @@
-//1178	1389	2567	201.94	2200	10.894	27.966
+//1220	1133	2353	191.17	2200	11.508=27.079
 module bitcoin_hash (input logic clk, reset_n, start,
  input logic [15:0] message_addr, output_addr,
  output logic done, mem_clk, mem_we,
