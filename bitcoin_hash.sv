@@ -104,7 +104,7 @@ always_ff @(posedge clk, negedge reset_n) begin
          e<=32'h510e527f;
          f<=32'h9b05688c;
          g<=32'h1f83d9ab;
-      h<=32'h5be0cd19; 
+        // h<=32'h5be0cd19; 
 		 for (int n = 0; n < 15; n++)begin 
 			w[n] <= w[n+1];
 		 end
@@ -270,7 +270,7 @@ always_ff @(posedge clk, negedge reset_n) begin
 				e<= 'h510e527f;
 				f<= 'h9b05688c;
 				g<= 'h1f83d9ab;
-				h<= 'h5be0cd19;
+			//	h<= 'h5be0cd19;
 				sum<=w[15]+sha256_k[count]+g;
 		//w[15]<=inter[count];
 		w[15]<=w[0];
